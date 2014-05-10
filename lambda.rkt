@@ -5,14 +5,24 @@
 ; Based off of http://redex.racket-lang.org/lam-v.html
 
 (define-language λv
-  (e (e e ...) x v)
-  (v (λ (x ...) e))
-  (E (v ... E e ...) hole)
-  (x (variable-except λ)))
+  (e (e e ...) (if0 e e e) x v)
+  (v (λ (x ...) e) number +)
+  (E (v ... E e ...) (if0 E e e) hole)
+  (x (variable-except λ + if0)))
 
 (define red
   (reduction-relation
    λv
+   (--> (in-hole E (+ number_1 number_2))
+        (in-hole E ,(+ (term number_1) (term number_2)))
+        "+")
+   (--> (in-hole E (if0 0 e_1 e_2))
+        (in-hole E e_1)
+        "if0t")
+   (--> (in-hole E (if0 number_1 e_1 e_2))
+        (in-hole E e_2)
+        "if0f"
+        (side-condition (not (= 0 (term number_1)))))
    (--> (in-hole E ((λ (x ..._1) e) v ..._1))
         (in-hole E (subst-n (x v) ... e))
         "βv")))
@@ -31,10 +41,10 @@
    (side-condition (not (member (term x_1) (term (x_2 ...)))))]
 
   ; subst without capture avoiding subst
-  [(subst x_1 any_1 (λ (x_2 ...) any_3))
+  [(subst x_1 any_1 (λ (x_2 ...) any_2))
    (λ (x_new ...)
       (subst x_1 any_1
-             (sbust-vars (x_2 x_new) ... any_2)))
+             (subst-vars (x_2 x_new) ... any_2)))
    (where (x_new ...)
           ,(variables-not-in
             (term (x_1 any_1 any_2))
@@ -53,3 +63,6 @@
   [(subst-vars (x_1 any_1) (x_2 any_2) ... any_3)
    (subst-vars (x_1 any_1) (subst-vars (x_2 any_2) ... any_3))]
   [(subst-vars any) any])
+
+;(traces red (term ((λ (n) (n n)) (λ (n)  (n n)))))
+(traces red (term ((λ (n) (if0 n 1 ((λ (x) (x x)) (λ (x) (x x))))) (+ 2 2))))
