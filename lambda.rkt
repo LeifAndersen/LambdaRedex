@@ -65,4 +65,13 @@
   [(subst-vars any) any])
 
 ;(traces red (term ((λ (n) (n n)) (λ (n)  (n n)))))
-(traces red (term ((λ (n) (if0 n 1 ((λ (x) (x x)) (λ (x) (x x))))) (+ 2 2))))
+;(traces red (term ((λ (n) (if0 n 1 ((λ (x) (x x)) (λ (x) (x x))))) (+ 2 2))))
+
+(define value? (redex-match λv v))
+
+(define (single-step? e)
+  (= (length (apply-reduction-relation red e))
+     1))
+
+(redex-check λv e (or (value? (term e))
+                      (single-step? (term e))))
