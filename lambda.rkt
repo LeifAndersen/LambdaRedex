@@ -5,10 +5,10 @@
 ; Based off of http://redex.racket-lang.org/lam-v.html
 
 (define-language λv
-  (e (e e ...) (if0 e e e) x v)
-  (v (λ (x ...) e) number +)
-  (E (v ... E e ...) (if0 E e e) hole)
-  (x (variable-except λ + if0)))
+  (e (e e ...) (if e e e) (if0 e e e) x v)
+  (v (λ (x ...) e) number + * boolean)
+  (E (v ... E e ...) (if E e e) (if0 E e e) hole)
+  (x (variable-except λ + * = if0 if boolean)))
 
 (define red
   (reduction-relation
@@ -16,6 +16,12 @@
    (--> (in-hole E (+ number_1 ...))
         (in-hole E ,(apply + (term (number_1 ...))))
         "+")
+   (--> (in-hole E (* number_1 ...))
+        (in-hole E ,(apply * (term (number_1 ...))))
+        "*")
+   (--> (in-hole E (= number_1 number_2))
+        (in-hole E ,(= (term number_1) (term number_2)))
+        "=")
    (--> (in-hole E (if0 0 e_1 e_2))
         (in-hole E e_1)
         "if0t")
@@ -23,6 +29,14 @@
         (in-hole E e_2)
         "if0f"
         (side-condition (not (= 0 (term number_1)))))
+   (--> (in-hole E (if #t e_1 e_2))
+        (in-hole E e_1)
+        "ift")
+   (--> (in-hole E (if #f e_1 e_2))
+        (in-hole E e_2)
+        "iff")
+   (--> (in-hole E (if e_1 e_2 e_3))
+        (in-hole E (if #t e_2 e_3)))
    (--> (in-hole E ((λ (x ..._1) e) v ..._1))
         (in-hole E (subst-n (x v) ... e))
         "βv")
@@ -32,12 +46,24 @@
         (error "free var"))
    (--> (in-hole E (number any_1 ...))
         (error "invalid application"))
+   (--> (in-hole E (boolean any_1 ...))
+        (error "invalid application"))
    (--> (in-hole E (if0 any_1 any_2 any_3))
         (error "invalid use of if0")
         (side-condition (not (number? (term any_1)))))
+   (--> (in-hole E (if any_1 any_2 any_3))
+        (error "invalid use of if")
+        (side-condition (not (boolean? (term any_1)))))
    (--> (in-hole E (+ any_1 ...))
         (error "invalid use of +")
         (side-condition (not (andmap (λ (x) (number? x)) (term (any_1 ...))))))
+   (--> (in-hole E (* any_1 ...))
+        (error "invalid use of *")
+        (side-condition (not (andmap (λ (x) (number? x)) (term (any_1 ...))))))
+   (--> (in-hole E (= any_1 ...))
+        (error "invalid use of =")
+        (side-condition (not (and (andmap (λ (x) (number? x)) (term (any_1 ...)))
+                                 (= 2 (length (term (any_1 ...))))))))
    (--> (in-hole E ((λ (x ...) e) v ...))
         (error "argument count mismatch")
         (side-condition (not (= (length (term (x ...)))
@@ -81,12 +107,17 @@
    (subst-vars (x_1 any_1) (subst-vars (x_2 any_2) ... any_3))]
   [(subst-vars any) any])
 
+
+; Should be turned into test-->
 ;(traces red (term ((λ (n) (n n)) (λ (n)  (n n)))))
 ;(traces red (term ((λ (n) (if0 n 1 ((λ (x) (x x)) (λ (x) (x x))))) (+ 2 2))))
 ;(traces red (term (0 K)))
 ;(traces red (term (if0 (λ () 0) 0 0)))
 ;(traces red (term (+ +)))
 ;(traces red (term ((λ () 1) 0)))
+;(traces red (term (= + +)))
+;(traces red (term ((λ (x) (if (= x 0) 5 9)) 0)))
+(traces red (term (if (= 0 0) 5 9)))
 
 (define value? (redex-match λv v))
 
