@@ -13,8 +13,8 @@
 (define red
   (reduction-relation
    λv
-   (--> (in-hole E (+ number_1 number_2))
-        (in-hole E ,(+ (term number_1) (term number_2)))
+   (--> (in-hole E (+ number_1 ...))
+        (in-hole E ,(apply + (term (number_1 ...))))
         "+")
    (--> (in-hole E (if0 0 e_1 e_2))
         (in-hole E e_1)
@@ -25,7 +25,24 @@
         (side-condition (not (= 0 (term number_1)))))
    (--> (in-hole E ((λ (x ..._1) e) v ..._1))
         (in-hole E (subst-n (x v) ... e))
-        "βv")))
+        "βv")
+
+   ; Preventing Invalid programs
+   (--> (in-hole E x)
+        (error "free var"))
+   (--> (in-hole E (number any_1 ...))
+        (error "invalid application"))
+   (--> (in-hole E (if0 any_1 any_2 any_3))
+        (error "invalid use of if0")
+        (side-condition (not (number? (term any_1)))))
+   (--> (in-hole E (+ any_1 ...))
+        (error "invalid use of +")
+        (side-condition (not (andmap (λ (x) (number? x)) (term (any_1 ...))))))
+   (--> (in-hole E ((λ (x ...) e) v ...))
+        (error "argument count mismatch")
+        (side-condition (not (= (length (term (x ...)))
+                                (length (term (v ...)))))))
+   ))
 
 (define-metafunction λv
   subst-n : (x any) ... any -> any
@@ -66,12 +83,20 @@
 
 ;(traces red (term ((λ (n) (n n)) (λ (n)  (n n)))))
 ;(traces red (term ((λ (n) (if0 n 1 ((λ (x) (x x)) (λ (x) (x x))))) (+ 2 2))))
+;(traces red (term (0 K)))
+;(traces red (term (if0 (λ () 0) 0 0)))
+;(traces red (term (+ +)))
+;(traces red (term ((λ () 1) 0)))
 
 (define value? (redex-match λv v))
 
 (define (single-step? e)
-  (= (length (apply-reduction-relation red e))
-     1))
+  (or (= (length (apply-reduction-relation red e))
+         1)
+      (let ([step (apply-reduction-relation red e)])
+        (ormap (λ (x) (equal? (term error)
+                              (car x)))
+                step))))
 
 (redex-check λv e (or (value? (term e))
                       (single-step? (term e))))
