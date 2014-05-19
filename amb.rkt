@@ -8,7 +8,7 @@
   (e (e e)
      (λ (x t) e)
      x
-    (amb e ...)
+     (amb e ...)
      number
      (+ e ...)
      (if0 e e e)
@@ -42,7 +42,7 @@
   [(types Γ x_1 t_1)
    (side-condition (different x_1 x_2))
    ------------------------------------
-   (types (x_2 : t_2 Γ) x_1 x_2)]
+   (types (x_2 : t_2 Γ) x_1 t_2)]
 
   [(types Γ e num) ...
    -----------------------
@@ -57,6 +57,18 @@
    -----------------------------
    (types Γ (if0 e_1 e_2 e_3) t)]
 
-  [(types Γ e num) ...
-   -------------------------
-   (types Γ (amb e ...) num)])
+  [(types Γ e t_1) ...
+   (side-condition (same-n t_1 ...))
+   (where t_2 ,(car (term (t_1 ...))))
+   -----------------------------------
+   (types Γ (amb e ...) t_2)])
+
+(define-metafunction amb+Γ
+  [(different x_1 x_1) #f]
+  [(different x_1 x_2) #t])
+
+(define-metafunction amb+Γ
+  [(same-n t_1 t_1 t_3 ...) (same-n t_1 t_3 ...)]
+  [(same-n t_1)             #t]
+  [(same-n)                 #t]
+  [(same-n t_1 t_2 ...)     #f])
