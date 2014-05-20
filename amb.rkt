@@ -8,6 +8,7 @@
 (define-language amb
   (e (e e)
      (λ (x t) e)
+     (λ ((x t) ...) e)
      x
      (amb e ...)
      number
@@ -33,6 +34,10 @@
    -----------------------------------
    (types Γ (λ (x t_1) e) (→ t_1 t_2))]
 
+  ;[(types (x : t_1 Γ) e t_2) ...
+  ; -----------------------------------
+  ; (types Γ (λ ((x t_1) ...) e) (→ t_1 ... t_2)
+
   [(types Γ e (→ (→ t_1 t_2) (→ t_1 t_2)))
    ---------------------------------------
    (types Γ (fix e) (→ t_1 t_2))]
@@ -43,13 +48,13 @@
   [(types Γ x_1 t_1)
    (side-condition (different x_1 x_2))
    ------------------------------------
-   (types (x_2 : t_2 Γ) x_1 t_2)]
+   (types (x_2 : t_2 Γ) x_1 t_1)]
 
   [(types Γ e num) ...
    -----------------------
    (types Γ (+ e ...) num)]
 
-  [---------------------
+  [--------------------
    (types Γ number num)]
 
   [(types Γ e_1 num)
@@ -67,6 +72,9 @@
 (define-metafunction amb+Γ
   [(different x_1 x_1) #f]
   [(different x_1 x_2) #t])
+
+(define-metafunction amb+Γ
+  [(out Γ) ,(write (term Γ))])
 
 (define-metafunction amb+Γ
   [(same-n t_1 t_1 t_3 ...) (same-n t_1 t_3 ...)]
@@ -133,3 +141,4 @@
                                           0
                                           (amb n (f (+ n -1)))))))
                   10)))))
+
