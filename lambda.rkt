@@ -110,14 +110,14 @@
 
 ; Should be turned into test-->
 ;(traces red (term ((λ (n) (n n)) (λ (n)  (n n)))))
-;(traces red (term ((λ (n) (if0 n 1 ((λ (x) (x x)) (λ (x) (x x))))) (+ 2 2))))
+(traces red (term ((λ (n) (if0 n 1 ((λ (x) (x x)) (λ (x) (x x))))) (+ 2 2))))
 ;(traces red (term (0 K)))
 ;(traces red (term (if0 (λ () 0) 0 0)))
 ;(traces red (term (+ +)))
 ;(traces red (term ((λ () 1) 0)))
 ;(traces red (term (= + +)))
 ;(traces red (term ((λ (x) (if (= x 0) 5 9)) 0)))
-(traces red (term (if (= 0 0) 5 9)))
+;(traces red (term (if (= 0 0) 5 9)))
 
 (define value? (redex-match λv v))
 
