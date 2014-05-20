@@ -4,9 +4,10 @@
 
 (require redex)
 (require redex/tut-subst)
+(require pict)
 
 (define-language amb
-  (e (e e)
+  (e (e e ...)
      (λ (x t) e)
      (λ ((x t) ...) e)
      x
@@ -15,7 +16,7 @@
      (+ e ...)
      (if0 e e e)
      (fix e))
-  (t (→ t t) num)
+  (t (→ t ... t) num)
   (x variable-not-otherwise-mentioned))
 
 (define-extended-language amb+Γ amb
@@ -34,9 +35,9 @@
    -----------------------------------
    (types Γ (λ (x t_1) e) (→ t_1 t_2))]
 
-  ;[(types (x : t_1 Γ) e t_2) ...
-  ; -----------------------------------
-  ; (types Γ (λ ((x t_1) ...) e) (→ t_1 ... t_2)
+  [(types (build-Γ (x t_1) ... Γ_1) e t_2)
+   -----------------------------------
+   (types Γ_1 (λ ((x t_1) ...) e) (→ t_1 ... t_2))]
 
   [(types Γ e (→ (→ t_1 t_2) (→ t_1 t_2)))
    ---------------------------------------
@@ -77,6 +78,12 @@
   [(out Γ) ,(write (term Γ))])
 
 (define-metafunction amb+Γ
+  build-Γ : (x t) ... Γ -> Γ
+  [(build-Γ (x_1 t_1) (x_2 t_2) ... Γ)
+   (build-Γ (x_2 t_2) ... (x_1 : t_1 Γ))]
+  [(build-Γ Γ) Γ])
+
+(define-metafunction amb+Γ
   [(same-n t_1 t_1 t_3 ...) (same-n t_1 t_3 ...)]
   [(same-n t_1)             #t]
   [(same-n)                 #t]
@@ -92,6 +99,7 @@
      (fix E)
      hole)
   (v (λ (x t) e)
+     (λ ((x t) ...) e)
      (fix v)
      number))
 
@@ -100,8 +108,12 @@
   [(Σ number ...) ,(apply + (term (number ...)))])
 
 (define-metafunction Ev
-  subst : x v e -> e
-  [(subst x v e) ,(subst/proc x? `(,(term x)) `(,(term v)) (term e))])
+  subst : (x v) ... e -> e
+  [(subst (x v) ... e)
+   ,(subst/proc x?
+                (term (x ...))
+                (term (v ...))
+                (term e))])
 
 (define x? (redex-match Ev x))
 
@@ -120,8 +132,11 @@
         (in-hole P (((λ (x t) e) (fix (λ (x t) e))) v))
         "fix")
    (--> (in-hole P ((λ (x t) e) v))
-        (in-hole P (subst x v e))
-        "Βv")
+        (in-hole P (subst (x v) e))
+        "βvs")
+   (--> (in-hole P ((λ ((x t) ..._1) e) v ..._1))
+        (in-hole P (subst (x v) ... e))
+        "βv")
    (--> (in-hole P (+ number ...))
         (in-hole P (Σ number ...))
         "+")
@@ -141,4 +156,13 @@
                                           0
                                           (amb n (f (+ n -1)))))))
                   10)))))
+
+(define (trace-multiarg)
+  (traces red (term (((λ ((x num) (y num)) (+ x y)) 3 4)))))
+
+(define (trace-singlearg)
+  (traces red (term (((λ ((x num)) (+ x 3)) 3)))))
+
+(define (trace-noarg)
+  (traces red (term ((+ 3 ((λ () 4)))))))
 
