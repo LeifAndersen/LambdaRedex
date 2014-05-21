@@ -6,6 +6,8 @@
 (require redex/tut-subst)
 (require pict)
 
+(provide (all-defined-out))
+
 (define-language amb
   (e (e e ...)
      (λ (x t) e)
@@ -16,7 +18,7 @@
      (+ e ...)
      (if0 e e e)
      (fix e))
-  (t (→ t ... t) num)
+  (t (→ t ... t) num void)
   (x variable-not-otherwise-mentioned))
 
 (define-extended-language amb+Γ amb
@@ -64,11 +66,14 @@
    -----------------------------
    (types Γ (if0 e_1 e_2 e_3) t)]
 
-  [(types Γ e t_1) ...
-   (side-condition (same-n t_1 ...))
-   (where t_2 ,(car (term (t_1 ...))))
-   -----------------------------------
-   (types Γ (amb e ...) t_2)])
+  [(types Γ e_1 t_1)
+   (types Γ e_2 t_2) ...
+   (side-condition (same-n t_1 t_2 ...))
+   -------------------------------------
+   (types Γ (amb e_1 e_2 ...) t_1)]
+
+  [--------------------
+   (types Γ (amb) void)])
 
 (define-metafunction amb+Γ
   [(different x_1 x_1) #f]
@@ -92,8 +97,7 @@
 (define-extended-language Ev amb+Γ
   (p (e ...))
   (P (e ... E e ...))
-  (E (v E)
-     (E e)
+  (E (v E) (E e)
      (+ v ... E e ...)
      (if0 E e e)
      (fix E)
@@ -126,7 +130,7 @@
         "if0t")
    (--> (in-hole P (if0 v e_1 e_2))
         (in-hole P e_2)
-        (side-condition (not (equal? 0 (term v))))
+        (side-condition (term (different v 0)))
         "if0f")
    (--> (in-hole P ((fix (λ (x t) e)) v))
         (in-hole P (((λ (x t) e) (fix (λ (x t) e))) v))
@@ -166,3 +170,72 @@
 (define (trace-noarg)
   (traces red (term ((+ 3 ((λ () 4)))))))
 
+(define (progress-holds? e)
+  (if (types? e)
+      (or (v? e) (reduces? e))
+      #t))
+
+(define (types? e)
+  (not (null? (judgment-holds (types · ,e t) t))))
+
+(define v? (redex-match Ev v))
+
+(define (reduces? e)
+  (not (null? (apply-reduction-relation red (term (,e))))))
+
+(define whole-pic
+  (scale (vl-append
+          20
+          (language->pict Ev)
+          (with-compound-rewriter
+           'different
+           (λ (lws)
+              (list "" (list-ref lws 2) " ≠ " (list-ref lws 3) ""))
+           (render-reduction-relation red))
+          (with-compound-rewriters
+           (['types
+             (λ (lws)
+                (list "" (list-ref lws 2) " ⊢ " (list-ref lws 3) " : " (list-ref lws 4) ""))]
+            ['build-Γ
+             (λ (lws)
+                (list "" "(" (list-ref (lw-e (list-ref lws 2)) 1) " : "
+                      (list-ref (lw-e (list-ref lws 2)) 2) " " (list-ref lws 3)
+                      " " (list-ref lws 4) ")" ""))]
+            ['different
+             (λ (lws)
+                (list "" (list-ref lws 2) " ≠ " (list-ref lws 3) ""))]
+            ['same-n
+             (λ (lws)
+                (list "" (list-ref lws 2) " = " (list-ref lws 3) " = " (list-ref lws 4) ""))])
+           (render-judgment-form types)))
+         3/2))
+
+(define lang-pic
+  (scale (language->pict Ev) 6/2))
+
+(define red-pic
+  (scale (with-compound-rewriter
+          'different
+          (λ (lws)
+             (list "" (list-ref lws 2) " ≠ " (list-ref lws 3) ""))
+          (reduction-relation->pict red))
+         4/2))
+
+(define types-pic
+  (scale (with-compound-rewriters
+          (['types
+            (λ (lws)
+               (list "" (list-ref lws 2) " ⊢ " (list-ref lws 3) " : " (list-ref lws 4) ""))]
+           ['build-Γ
+            (λ (lws)
+               (list "" "(" (list-ref (lw-e (list-ref lws 2)) 1) " : "
+                     (list-ref (lw-e (list-ref lws 2)) 2) " " (list-ref lws 3)
+                     " " (list-ref lws 4) ")" ""))]
+           ['different
+            (λ (lws)
+               (list "" (list-ref lws 2) " ≠ " (list-ref lws 3) ""))]
+           ['same-n
+            (λ (lws)
+               (list "" (list-ref lws 2) " = " (list-ref lws 3) " = " (list-ref lws 4) ""))])
+          (render-judgment-form types))
+         9/10))
