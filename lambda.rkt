@@ -1,14 +1,20 @@
 #lang racket
 
 (require redex)
+(require redex/tut-subst)
 
 ; Based off of http://redex.racket-lang.org/lam-v.html
 
 (define-language λv
   (e (e e ...) (if e e e) (if0 e e e) x v)
-  (v (λ (x ...) e) number + * boolean)
+  (v (λ (x ...) e) number + * = boolean)
   (E (v ... E e ...) (if E e e) (if0 E e e) hole)
-  (x (variable-except λ + * = if0 if boolean)))
+  (x variable-not-otherwise-mentioned))
+
+;(define-extend-langauge λenv
+;  (a number)
+;  (ρ · (x : a))
+;  (σ · (a : v)))
 
 (define red
   (reduction-relation
@@ -36,9 +42,10 @@
         (in-hole E e_2)
         "iff")
    (--> (in-hole E (if e_1 e_2 e_3))
-        (in-hole E (if #t e_2 e_3)))
+        (in-hole E (if #t e_2 e_3))
+        (side-condition (not (boolean? (term e_1)))))
    (--> (in-hole E ((λ (x ..._1) e) v ..._1))
-        (in-hole E (subst-n (x v) ... e))
+        (in-hole E (subst (x v) ... e))
         "βv")
 
    ; Preventing Invalid programs
@@ -53,7 +60,8 @@
         (side-condition (not (number? (term any_1)))))
    (--> (in-hole E (if any_1 any_2 any_3))
         (error "invalid use of if")
-        (side-condition (not (boolean? (term any_1)))))
+        (side-condition (and (not (boolean? (term any_1)))
+                             (not (reduces? (term any_1))))))
    (--> (in-hole E (+ any_1 ...))
         (error "invalid use of +")
         (side-condition (not (andmap (λ (x) (number? x)) (term (any_1 ...))))))
@@ -70,54 +78,16 @@
                                 (length (term (v ...)))))))
    ))
 
-(define-metafunction λv
-  subst-n : (x any) ... any -> any
-  [(subst-n (x_1 any_1) (x_2 any_2) ... any_3)
-   (subst x_1 any_1 (subst-n (x_2 any_2) ... any_3))]
-  [(subst-n any_3) any_3])
+(define x? (redex-match λv x))
 
 (define-metafunction λv
-  subst : x any any -> any
-  ; Avoid capture avoiding subst
-  [(subst x_1 any_1 (λ (x_2 ... x_1 x_3 ...) any_2))
-   (λ (x_2 ... x_1 x_3 ...) any_2)
-   (side-condition (not (member (term x_1) (term (x_2 ...)))))]
+  subst : (x v) ... e -> e
+  [(subst (x v) ... e)
+   ,(subst/proc x?
+                (term (x ...))
+                (term (v ...))
+                (term e))])
 
-  ; subst without capture avoiding subst
-  [(subst x_1 any_1 (λ (x_2 ...) any_2))
-   (λ (x_new ...)
-      (subst x_1 any_1
-             (subst-vars (x_2 x_new) ... any_2)))
-   (where (x_new ...)
-          ,(variables-not-in
-            (term (x_1 any_1 any_2))
-            (term (x_2 ...))))]
-  [(subst x_1 any_1 x_1) any_1]
-  [(subst x_1 any_1 x_2) x_2]
-  [(subst x_1 any_1 (any_2 ...)) ((subst x_1 any_1 any_2) ...)]
-  [(subst x_1 any_1 any_2) any_2])
-
-(define-metafunction λv
-  subst-vars : (x any) ... any -> any
-  [(subst-vars (x_1 any_1) x_1) any_1]
-  [(subst-vars (x_1 any_1) (any_2 ...))
-   ((subst-vars (x_1 any_1) any_2) ...)]
-  [(subst-vars (x_1 any_1) any_2) any_2]
-  [(subst-vars (x_1 any_1) (x_2 any_2) ... any_3)
-   (subst-vars (x_1 any_1) (subst-vars (x_2 any_2) ... any_3))]
-  [(subst-vars any) any])
-
-
-; Should be turned into test-->
-;(traces red (term ((λ (n) (n n)) (λ (n)  (n n)))))
-(traces red (term ((λ (n) (if0 n 1 ((λ (x) (x x)) (λ (x) (x x))))) (+ 2 2))))
-;(traces red (term (0 K)))
-;(traces red (term (if0 (λ () 0) 0 0)))
-;(traces red (term (+ +)))
-;(traces red (term ((λ () 1) 0)))
-;(traces red (term (= + +)))
-;(traces red (term ((λ (x) (if (= x 0) 5 9)) 0)))
-;(traces red (term (if (= 0 0) 5 9)))
 
 (define value? (redex-match λv v))
 
@@ -129,5 +99,26 @@
                               (car x)))
                 step))))
 
+(define (progress-holds? e)
+  (or (v? e) (reduces? e)))
+
+(define v? (redex-match λv v))
+
+(define (reduces? e)
+  (not (null? (apply-reduction-relation red (term (,e))))))
+
+(test-->> red #:cycles-ok
+          (term ((λ (n) (n n)) (λ (n)  (n n)))))
+(test-->> red #:cycles-ok
+          (term ((λ (n) (if0 n 1 ((λ (x) (x x)) (λ (x) (x x))))) (+ 2 2))))
+(test-->> red
+          (term ((λ (x) (if (= x 0) 5 9)) 0))
+          (term 5))
+(test-->> red
+          (term (if (= 0 0) 5 9))
+          (term 5))
+
 (redex-check λv e (or (value? (term e))
                       (single-step? (term e))))
+
+(test-results)
