@@ -30,35 +30,48 @@
 (define red
   (reduction-relation
    λesk
-   (--> (in-hole E (+ number ...))
-        (in-hole E (Σ number ...))
+   (--> e
+        (ς e () ())
+        "inject"
+        (side-condition (not (v? (term e)))))
+   (--> (ς v ρ σ)
+        v
+        "halt")
+   (--> (ς (in-hole E x) ρ σ)
+        (ς (in-hole E (ρσ-lookup ρ σ x)) ρ σ)
+        "lookup"
+        (side-condition (term (in-ρ ρ x))))
+   (--> (ς (in-hole E (+ number ...)) ρ σ)
+        (ς (in-hole E (Σ number ...)) ρ σ)
         "+")
-   (--> (in-hole E (* number ...))
-        (in-hole E (Π number ...))
+   (--> (ς (in-hole E (* number ...)) ρ σ)
+        (ς (in-hole E (Π number ...)) ρ σ)
         "*")
-   (--> (in-hole E (= number_1 number_2))
-        (in-hole E (== number_1 number_2))
+   (--> (ς (in-hole E (= number_1 number_2)) ρ σ)
+        (ς (in-hole E (== number_1 number_2)) ρ σ)
         "=")
-   (--> (in-hole E (if0 0 e_1 e_2))
-        (in-hole E e_1)
+   (--> (ς (in-hole E (if0 0 e_1 e_2)) ρ σ)
+        (ς (in-hole E e_1) ρ σ)
         "if0t")
-   (--> (in-hole E (if0 v e_1 e_2))
-        (in-hole E e_2)
+   (--> (ς (in-hole E (if0 v e_1 e_2)) ρ σ)
+        (ς (in-hole E e_2) ρ σ)
         "if0f"
         (side-condition (term (different v 0))))
-   (--> (in-hole E (if #t e_1 e_2))
-        (in-hole E e_1)
+   (--> (ς (in-hole E (if #t e_1 e_2)) ρ σ)
+        (ς (in-hole E e_1) ρ σ)
         "ift")
-   (--> (in-hole E (if #f e_1 e_2))
-        (in-hole E e_2)
+   (--> (ς (in-hole E (if #f e_1 e_2)) ρ σ)
+        (ς (in-hole E e_2) ρ σ)
         "iff")
-   (--> (in-hole E ((λ (x ..._1) e) v ..._1))
-        (in-hole E (subst (x v) ... e))
+   (--> (ς (in-hole E ((λ (x ..._1) e) v ..._1)) ρ σ)
+        (ς (in-hole E (subst (x v) ... e)) ρ σ)
         "βv")
 
    ; Preventing Invalid programs
-   (--> (in-hole E x)
-        (error "free var"))
+   (--> (ς (in-hole E x) ρ σ)
+        (ς (in-hole E (ρσ-lookup ρ σ x)) ρ σ)
+        "lookup-fil"
+        (side-condition (not (term (in-ρ ρ x)))))
    (--> (in-hole E (number any_1 ...))
         (error "invalid application"))
    (--> (in-hole E (boolean any_1 ...))
@@ -100,7 +113,6 @@
   [(== number_1 number_2) ,(= (term number_1) (term number_2))])
 
 (define-metafunction λesk
-  in-ρ : ρ x -> boolean
   [(in-ρ ρ x) ,(not (equal? #f (assq (term x) (term ρ))))])
 
 (define-metafunction λesk
@@ -141,24 +153,27 @@
 (define (reduces? e)
   (not (null? (apply-reduction-relation red (term (,e))))))
 
-(test-->> red #:cycles-ok
-          (term ((λ (n) (n n)) (λ (n) (n n)))))
-(test-->> red #:cycles-ok
-          (term ((λ (n) (if0 n 1 ((λ (x) (x x)) (λ (x) (x x))))) (+ 2 2))))
-(test-->> red
-          (term ((λ (x) (x x)) (λ (x) x)))
-          (term (λ (x) x)))
-(test-->> red
-          (term ((λ (x) (if (= x 0) 5 9)) 0))
-          (term 5))
-(test-->> red
-          (term (if (= 0 0) 5 9))
-          (term 5))
-(test-->> red
-          (term ((λ (x y) (+ x y)) 3 4))
-          (term 7))
+(define (test-suite)
+  (test-->> red #:cycles-ok
+            (term ((λ (n) (n n)) (λ (n) (n n)))))
+  (test-->> red #:cycles-ok
+            (term ((λ (n) (if0 n 1 ((λ (x) (x x)) (λ (x) (x x))))) (+ 2 2))))
+  (test-->> red
+            (term ((λ (x) (x x)) (λ (x) x)))
+            (term (λ (x) x)))
+  (test-->> red
+            (term ((λ (x) (if (= x 0) 5 9)) 0))
+            (term 5))
+  (test-->> red
+            (term (if (= 0 0) 5 9))
+            (term 5))
+  (test-->> red
+            (term ((λ (x y) (+ x y)) 3 4))
+            (term 7))
 
-(redex-check λesk e (or (v? (term e))
-                        (single-step? (term e))))
+  (redex-check λesk e (or (v? (term e))
+                          (single-step? (term e))))
 
-(test-results)
+  (test-results))
+
+(test-suite)
