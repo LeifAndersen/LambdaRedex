@@ -20,13 +20,13 @@
      (if E e e)
      (if0 E e e)
      hole)
-  (v .... lam closure)
+  (v .... closure)
   (closure (clo e ρ))
-  (addr number)
+  (addr v)
   (state (ς E ρ σ κ))
   (ρ ((x addr) ...))
   (σ ((addr val) ...))
-  (κ (letk v e ρ κ)
+  (κ (letk x e ρ κ)
       halt))
 
 (define red
@@ -36,44 +36,51 @@
         (ς e () () halt)
         "inject"
         (side-condition (not (v? (term e)))))
-   (--> (ς v ρ σ κ)
+   (--> (ς v ρ σ halt)
         v
         "halt")
    (--> (ς (in-hole E x) ρ σ κ)
         (ς (in-hole E (ρσ-lookup ρ σ x)) ρ σ κ)
         "lookup"
         (side-condition (term (in-ρ ρ x))))
-   (--> (ς (in-hole E (+ number ...)) ρ σ κ)
-        (ς (in-hole E (Σ number ...)) ρ σ κ)
+   (--> (ς (in-hole E ((clo (λ (x ..._1) e) ρ_1) v ..._1)) ρ_2 σ κ)
+        (ς (in-hole E (subst (x v) ... e)) ρ_2 σ κ)
+        "βv")
+   (--> (ς (in-hole E (λ (x ...) e)) ρ σ κ)
+        (ς (in-hole E (clo (λ (x ...) e) ρ)) ρ σ κ))
+   (==> (+ number ...)
+        (Σ number ...)
         "+")
-   (--> (ς (in-hole E (* number ...)) ρ σ κ)
-        (ς (in-hole E (Π number ...)) ρ σ κ)
+   (==> (* number ...)
+        (Π number ...)
         "*")
-   (--> (ς (in-hole E (= number_1 number_2)) ρ σ κ)
-        (ς (in-hole E (== number_1 number_2)) ρ σ κ)
+   (==> (= number_1 number_2)
+        (== number_1 number_2)
         "=")
-   (--> (ς (in-hole E (if0 0 e_1 e_2)) ρ σ κ)
-        (ς (in-hole E e_1) ρ σ κ)
+   (==> (if0 0 e_1 e_2)
+        e_1
         "if0t")
-   (--> (ς (in-hole E (if0 v e_1 e_2)) ρ σ κ)
-        (ς (in-hole E e_2) ρ σ κ)
+   (==> (if0 v e_1 e_2)
+        e_2
         "if0f"
         (side-condition (term (different v 0))))
-   (--> (ς (in-hole E (if #t e_1 e_2)) ρ σ κ)
-        (ς (in-hole E e_1) ρ σ κ)
+   (==> (if #t e_1 e_2)
+        e_1
         "ift")
-   (--> (ς (in-hole E (if #f e_1 e_2)) ρ σ κ)
-        (ς (in-hole E e_2) ρ σ κ)
+   (==> (if #f e_1 e_2)
+        e_2
         "iff")
-   (--> (ς (in-hole E ((λ (x ..._1) e) v ..._1)) ρ σ κ)
-        (ς (in-hole E (subst (x v) ... e)) ρ σ κ)
-        "βv")
 
    ; Preventing Invalid programs
    (--> (ς (in-hole E x) ρ σ κ)
         (ς (in-hole E (ρσ-lookup ρ σ x)) ρ σ κ)
-        "lookup-fil"
-        (side-condition (not (term (in-ρ ρ x)))))))
+        "lookup-fell"
+        (side-condition (not (term (in-ρ ρ x)))))
+
+   with
+   [(--> (ς (in-hole E a) ρ σ κ)
+         (ς (in-hole E b) ρ σ κ))
+    (==> a b)]))
 
 (define-metafunction λesk
   [(different v_1 v_1) #f]
@@ -99,12 +106,32 @@
   [(ρ-lookup ρ x) ,(second (assq (term x) (term ρ)))])
 
 (define-metafunction λesk
+  ρ-extend : ρ x addr -> ρ
+  [(ρ-extend ρ x addr) (term ,(cons (cons (term x) (term addr)) (term ρ)))])
+
+(define-metafunction λesk
   σ-lookup : σ addr -> v
   [(σ-lookup σ addr) ,(second (assq (term addr) (term σ)))])
 
 (define-metafunction λesk
+  σ-extend : σ addr v -> σ
+  [(σ-extend σ addr v) (term ,(cons (cons (term x) (term addr)) (term ρ)))])
+
+(define-metafunction λesk
   ρσ-lookup : ρ σ x -> v
   [(ρσ-lookup ρ σ x) (σ-lookup σ (ρ-lookup ρ x))])
+
+(define-metafunction λesk
+  alloc : v -> addr
+  [(alloc v) v])
+
+(define-metafunction λesk
+  apply-κ : κ v σ -> state
+  [(apply-κ halt v σ)
+   (ς v () ())]
+  [(apply-κ (letk x e ρ) v σ)
+   (ς e (ρ-extend ρ x a) (σ-extend σ a v))
+   (where a (alloc v))])
 
 (define-metafunction λesk
   subst : (x v) ... e -> e
@@ -141,7 +168,7 @@
             (term ((λ (n) (if0 n 1 ((λ (x) (x x)) (λ (x) (x x))))) (+ 2 2))))
   (test-->> red
             (term ((λ (x) (x x)) (λ (x) x)))
-            (term (λ (x) x)))
+            (term (clo (λ (x) x) ())))
   (test-->> red
             (term ((λ (x) (if (= x 0) 5 9)) 0))
             (term 5))
