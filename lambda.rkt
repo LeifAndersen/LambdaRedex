@@ -1,7 +1,6 @@
 #lang racket
 
 (require redex)
-(require redex/tut-subst)
 (require pict)
 
 ; Based off of http://redex.racket-lang.org/lam-v.html
@@ -11,21 +10,22 @@
      (if e e e)
      (if0 e e e)
      lam x v)
-  (lam (λ (x ...) e) + * =)
+  (lam (λ (x ...) e))
+  (alam + * =)
   (v number boolean)
   (x variable-not-otherwise-mentioned))
 
 (define-extended-language λesk λv
+  (v .... closure alam)
   (E (v ... E e ...)
      (if E e e)
      (if0 E e e)
      hole)
-  (v .... closure)
   (closure (clo e ρ))
-  (addr v)
+  (addr v x)
   (state (ς E ρ σ κ))
   (ρ ((x addr) ...))
-  (σ ((addr val) ...))
+  (σ ((addr v) ...))
   (κ (letk x e ρ κ)
       halt))
 
@@ -44,8 +44,13 @@
         "lookup"
         (side-condition (term (in-ρ ρ x))))
    (--> (ς (in-hole E ((clo (λ (x ..._1) e) ρ_1) v ..._1)) ρ_2 σ κ)
-        (ς (in-hole E (subst (x v) ... e)) ρ_2 σ κ)
-        "βv")
+        (ς (in-hole E e) ρ_3 σ_3 κ)
+        "βv"
+        ;(where ρ_3 (ρ-extend-n* ρ_1 (x ...) (v ...)))
+        ;(where σ_3 (σ-extend-n* σ (v ...) (v ...))))
+        (where (addr ...) (alloc-n v ...))
+        (where ρ_3 (ρ-extend-n ρ_1 (x addr) ...))
+        (where σ_3 (σ-extend-n σ  (addr v) ...)))
    (--> (ς (in-hole E (λ (x ...) e)) ρ σ κ)
         (ς (in-hole E (clo (λ (x ...) e) ρ)) ρ σ κ))
    (==> (+ number ...)
@@ -107,7 +112,17 @@
 
 (define-metafunction λesk
   ρ-extend : ρ x addr -> ρ
-  [(ρ-extend ρ x addr) (term ,(cons (cons (term x) (term addr)) (term ρ)))])
+  [(ρ-extend ρ x addr) ,(cons (term (x addr)) (term ρ))])
+
+(define-metafunction λesk
+  ρ-extend-n : ρ (x addr) ... -> ρ
+  [(ρ-extend-n ρ) ρ]
+  [(ρ-extend-n ρ (x_1 addr_1) (x_2 addr_2) ...)
+   (ρ-extend-n (ρ-extend ρ x_1 addr_1) (x_2 addr_2) ...)])
+
+(define-metafunction λesk
+  ρ-extend-n* : ρ (x ...) (addr ...) -> ρ
+  [(ρ-extend-n* ρ (x ...) (addr ...)) (ρ-extend-n ρ (x addr) ...)])
 
 (define-metafunction λesk
   σ-lookup : σ addr -> v
@@ -115,7 +130,17 @@
 
 (define-metafunction λesk
   σ-extend : σ addr v -> σ
-  [(σ-extend σ addr v) (term ,(cons (cons (term x) (term addr)) (term ρ)))])
+  [(σ-extend σ addr v) ,(cons (term (addr v)) (term σ))])
+
+(define-metafunction λesk
+  σ-extend-n : σ (addr v) ... -> σ
+  [(σ-extend-n σ) σ]
+  [(σ-extend-n σ (addr_1 v_1) (addr_2 v_2) ...)
+   (σ-extend-n (σ-extend σ addr_1 v_1) (addr_2 v_2) ...)])
+
+(define-metafunction λesk
+  σ-extend-n* : σ (addr ...) (v ...) -> σ
+  [(σ-extend-n* σ (addr ...) (v ...)) (σ-extend-n σ (addr v) ...)])
 
 (define-metafunction λesk
   ρσ-lookup : ρ σ x -> v
@@ -124,6 +149,12 @@
 (define-metafunction λesk
   alloc : v -> addr
   [(alloc v) v])
+;  [(alloc v) ,(variable-not-in (term v) 'addr)])
+
+(define-metafunction λesk
+  alloc-n : v ... -> (addr ...)
+  [(alloc-n) ()]
+  [(alloc-n v_1 v_2 ...) ,(cons (term (alloc v_1)) (term (alloc-n v_2 ...)))])
 
 (define-metafunction λesk
   apply-κ : κ v σ -> state
@@ -133,19 +164,19 @@
    (ς e (ρ-extend ρ x a) (σ-extend σ a v))
    (where a (alloc v))])
 
-(define-metafunction λesk
-  subst : (x v) ... e -> e
-  [(subst (x v) ... e)
-   ,(subst/proc x?
-                (term (x ...))
-                (term (v ...))
-                (term e))])
-
 (define κ? (redex-match λesk κ))
 
 (define x? (redex-match λesk x))
 
 (define v? (redex-match λesk v))
+
+(define ρ? (redex-match λesk ρ))
+
+(define σ? (redex-match λesk σ))
+
+(define lam? (redex-match λesk lam))
+
+(define closure? (redex-match λesk closure))
 
 (define (single-step? e)
   (or (= (length (apply-reduction-relation red e))
@@ -160,12 +191,7 @@
 
 (define (reduces? e)
   (not (null? (apply-reduction-relation red (term (,e))))))
-
-(define (test-suite)
-  (test-->> red #:cycles-ok
-            (term ((λ (n) (n n)) (λ (n) (n n)))))
-  (test-->> red #:cycles-ok
-            (term ((λ (n) (if0 n 1 ((λ (x) (x x)) (λ (x) (x x))))) (+ 2 2))))
+ (define (test-suite)
   (test-->> red
             (term ((λ (x) (x x)) (λ (x) x)))
             (term (clo (λ (x) x) ())))
