@@ -9,9 +9,10 @@
   (e (e e ...)
      (if e e e)
      (if0 e e e)
-     lam x v)
+     lam x v letexpr)
   (lam (λ (x ...) e))
   (alam + * =)
+  (letexpr (let ((x e)) e))
   (v number boolean)
   (x variable-not-otherwise-mentioned))
 
@@ -39,6 +40,12 @@
    (--> (ς v ρ σ halt)
         v
         "halt")
+   (--> (ς v ρ_1 σ (letk x e ρ_2 κ))
+        (ς e ρ_3 σ_3 κ)
+        "appletk"
+        (where addr (alloc v))
+        (where ρ_3 (ρ-extend ρ_2 x addr))
+        (where σ_3 (σ-extend σ addr v)))
    (--> (ς (in-hole E x) ρ σ κ)
         (ς (in-hole E (ρσ-lookup ρ σ x)) ρ σ κ)
         "lookup"
@@ -46,13 +53,15 @@
    (--> (ς (in-hole E ((clo (λ (x ..._1) e) ρ_1) v ..._1)) ρ_2 σ κ)
         (ς (in-hole E e) ρ_3 σ_3 κ)
         "βv"
-        ;(where ρ_3 (ρ-extend-n* ρ_1 (x ...) (v ...)))
-        ;(where σ_3 (σ-extend-n* σ (v ...) (v ...))))
         (where (addr ...) (alloc-n v ...))
         (where ρ_3 (ρ-extend-n ρ_1 (x addr) ...))
         (where σ_3 (σ-extend-n σ  (addr v) ...)))
    (--> (ς (in-hole E (λ (x ...) e)) ρ σ κ)
-        (ς (in-hole E (clo (λ (x ...) e) ρ)) ρ σ κ))
+        (ς (in-hole E (clo (λ (x ...) e) ρ)) ρ σ κ)
+        "A")
+   (--> (ς (in-hole E (let ((x e_1)) e_2)) ρ σ κ_1)
+        (ς (in-hole E e_1) ρ σ κ_2)
+        (where κ_2 (letk x e_2 ρ κ_1)))
    (==> (+ number ...)
         (Σ number ...)
         "+")
@@ -150,6 +159,7 @@
   alloc : v -> addr
   [(alloc v) v])
 ;  [(alloc v) ,(variable-not-in (term v) 'addr)])
+;  [(alloc v) ,(gensym 'addr)])
 
 (define-metafunction λesk
   alloc-n : v ... -> (addr ...)
@@ -178,6 +188,8 @@
 
 (define closure? (redex-match λesk closure))
 
+(define letexpr? (redex-match λesk letexpr))
+
 (define (single-step? e)
   (or (= (length (apply-reduction-relation red e))
          1)
@@ -204,6 +216,12 @@
   (test-->> red
             (term ((λ (x y) (+ x y)) 3 4))
             (term 7))
+  (test-->> red
+            (term (let ((x 5)) x))
+            (term 5))
+  (test-->> red
+            (term (let ((x ((λ (x) (+ x 1)) (+ 3 1)))) x))
+            (term 5))
 
   (redex-check λesk e (or (v? (term e))
                           (single-step? (term e))))
